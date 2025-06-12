@@ -11,78 +11,95 @@
 #include <xc.h>
 #include <stdio.h>
 
-#define MCP23S08_WRITE 0x40  // A1:A0 = 00, R/W = 0
-#define IODIR 0x00
-#define OLAT  0x0A
-#define CS LATCbits.LATC6
-#define CS_TRIS TRISCbits.TRISC6
+#define RS LATBbits.LATB0
+#define EN LATBbits.LATB1
+#define D4 LATBbits.LATB4
+#define D5 LATBbits.LATB5
+#define D6 LATBbits.LATB6
+#define D7 LATBbits.LATB7
 
-void DisplayDigit(uint8_t digit);
-void MCP23S08_Init(void);
-void MCP23S08_Write(uint8_t reg, uint8_t data);
-void SPI_Write(uint8_t data);
-void SPI_Init(void);
-
-uint8_t current_position = 0;
-uint16_t moisture_value = 0; 
-volatile uint8_t timeout_occurred = 0;
-const uint8_t segmentMap[10] = {
-    0b00111111 << 1, // 0
-    0b00000110 << 1, // 1
-    0b01011011 << 1, // 2
-    0b01001111 << 1, // 3
-    0b01100110 << 1, // 4
-    0b01101101 << 1, // 5
-    0b01111101 << 1, // 6
-    0b00000111 << 1, // 7
-    0b01111111 << 1, // 8
-    0b01101111 << 1  // 9
-};
+void Lcd_Init(void);
+void Lcd_Cmd(unsigned char cmd);
+void Lcd_Char(char data);
+void Lcd_String(const char *str);
+void Lcd_Set_Cursor(unsigned char row, unsigned char column);
+void Lcd_Enable(void);
 
 void main(void){
     OSCCONbits.IRCF = 0b110;   
     OSCCONbits.SCS = 0b10;  
-    while (!OSCCONbits.HFIOFS);
     
-    ANSELC = 0x00;
-    SPI_Init();
-    MCP23S08_Init();
-    for (uint8_t i = 0; i < 10; i++) {
-                DisplayDigit(i);
-                __delay_ms(100);
-        
-            }
+    while (!OSCCONbits.HFIOFS);
+    TRISB = 0x00; 
+    LATB = 0x00;
+    
+    Lcd_Init();
+    Lcd_Set_Cursor(1, 1);
+        Lcd_String("HELLO");
+        char buf1[5];
+        sprintf(buf1,"THERE!");
+}
+void Lcd_Enable(void) {
+    EN = 1;
+    __delay_us(1);
+    EN = 0;
+    __delay_us(50);  
 }
 
-void SPI_Init(void) {
-    TRISC3 = 0; 
-    TRISC4 = 1;
-    TRISC5 = 0;
-    CS_TRIS = 0;
-    CS = 1;
+void Lcd_Cmd(unsigned char cmd) {
+    RS = 0;
+    
+    D4 = (cmd >> 4) & 1;
+    D5 = (cmd >> 5) & 1;
+    D6 = (cmd >> 6) & 1;
+    D7 = (cmd >> 7) & 1;
+    Lcd_Enable();
 
-    SSPSTAT = 0x40;   
-    SSPCON1 = 0x20;      
+    D4 = cmd & 1;
+    D5 = (cmd >> 1) & 1;
+    D6 = (cmd >> 2) & 1;
+    D7 = (cmd >> 3) & 1;
+    Lcd_Enable();
 }
 
-void SPI_Write(uint8_t data) {
-    SSPBUF = data;
-    while (!SSPSTATbits.BF); 
+void Lcd_Char(char data) {
+    RS = 1;
+    
+    D4 = (data >> 4) & 1;
+    D5 = (data >> 5) & 1;
+    D6 = (data >> 6) & 1;
+    D7 = (data >> 7) & 1;
+    Lcd_Enable();
+
+    D4 = data & 1;
+    D5 = (data >> 1) & 1;
+    D6 = (data >> 2) & 1;
+    D7 = (data >> 3) & 1;
+    Lcd_Enable();
 }
 
-void MCP23S08_Write(uint8_t reg, uint8_t data) {
-    CS = 0;
-    SPI_Write(MCP23S08_WRITE);
-    SPI_Write(reg);
-    SPI_Write(data);
-    CS = 1;
+void Lcd_String(const char *str) {
+    while (*str) {
+        Lcd_Char(*str++);
+    }
 }
 
-void MCP23S08_Init(void) {
-    MCP23S08_Write(IODIR, 0x01);
+void Lcd_Set_Cursor(unsigned char row, unsigned char column) {
+    unsigned char pos;
+    if (row == 1)
+        pos = 0x80 + (column - 1);
+    else
+        pos = 0xC0 + (column - 1);
+
+    Lcd_Cmd(pos);
 }
 
-void DisplayDigit(uint8_t digit) {
-    if (digit > 9) digit = 0;
-    MCP23S08_Write(OLAT, segmentMap[digit]);
+void Lcd_Init(void) {
+    __delay_ms(15); 
+    Lcd_Cmd(0x02);
+    Lcd_Cmd(0x28); 
+    Lcd_Cmd(0x0C);
+    Lcd_Cmd(0x06);
+    Lcd_Cmd(0x01);
+    __delay_ms(2);
 }
